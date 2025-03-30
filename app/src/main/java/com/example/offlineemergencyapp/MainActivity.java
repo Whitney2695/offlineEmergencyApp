@@ -1,41 +1,32 @@
 package com.example.offlineemergencyapp;
 
-import android.Manifest;
-import android.content.Context;
-import android.content.Intent;
-import android.content.SharedPreferences;
-import android.content.pm.PackageManager;
-import android.location.LocationManager;
+import android.location.Location;
 import android.os.Bundle;
-import android.os.Handler;
 import android.telephony.SmsManager;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
-
 import androidx.activity.EdgeToEdge;
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
-import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
-
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.Locale;
+import com.example.offlineemergencyapp.helpers.LocationHelper;
+import com.example.offlineemergencyapp.helpers.ShakeDetector;
+import com.example.offlineemergencyapp.services.EmergencyContactService;
+import java.util.ArrayList;
+import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
 
     private TextView txtGPSStatus, txtLastSOS, txtContacts;
     private ProgressBar progressSending;
     private Button btnSOS, btnSettings;
-
-    private static final int PERMISSION_REQUEST_CODE = 1;
-    private static final String SOS_PREF = "sos_prefs";
-    private static final String LAST_SOS_TIME = "last_sos_time";
+    private LocationHelper locationHelper;
+    private EmergencyContactService contactService;
+    private ShakeDetector shakeDetector;
+    private List<String> emergencyContacts = new ArrayList<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -43,13 +34,7 @@ public class MainActivity extends AppCompatActivity {
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_main);
 
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
-            Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
-            return insets;
-        });
-
-        // Initialize UI elements
+        // UI Elements
         txtGPSStatus = findViewById(R.id.txtGPSStatus);
         txtLastSOS = findViewById(R.id.txtLastSOS);
         txtContacts = findViewById(R.id.txtContacts);
@@ -57,94 +42,97 @@ public class MainActivity extends AppCompatActivity {
         btnSOS = findViewById(R.id.btnSOS);
         btnSettings = findViewById(R.id.btnSettings);
 
-        // Check GPS status
-        checkGPSStatus();
+        // Initialize Helpers
+        locationHelper = new LocationHelper(this, new LocationHelper.GPSCallback() {
+            @Override
+            public void onGPSStatusChanged(boolean enabled) {
+                updateGPSStatus(enabled);
+            }
+        });
 
-        // Load last SOS time
-        loadLastSOSTime();
+        contactService = new EmergencyContactService(new EmergencyContactService.ContactsCallback() {
+            @Override
+            public void onContactsReceived(List<String> contacts) {
+                updateEmergencyContacts(contacts);
+            }
+        });
 
-        // Load emergency contacts
-        loadEmergencyContacts();
+        shakeDetector = new ShakeDetector(this, new ShakeDetector.ShakeListener() {
+            @Override
+            public void onShakeDetected() {
+                sendSOS();
+            }
+        });
 
-        // SOS Button Click Event
-        btnSOS.setOnClickListener(v -> sendSOSAlert());
+        // Fetch Contacts from Firebase
+        contactService.fetchEmergencyContacts();
 
-        // Settings Button Click Event (Updated to match `settings.java`)
-        btnSettings.setOnClickListener(v -> {
-            Intent intent = new Intent(MainActivity.this, settings.class);
-            startActivity(intent);
+        // Button Click Listeners
+        btnSOS.setOnClickListener(v -> sendSOS());
+        btnSettings.setOnClickListener(v -> openSettings());
+
+        // Apply Window Insets
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
+            v.setPadding(insets.getInsets(WindowInsetsCompat.Type.systemBars()).left,
+                    insets.getInsets(WindowInsetsCompat.Type.systemBars()).top,
+                    insets.getInsets(WindowInsetsCompat.Type.systemBars()).right,
+                    insets.getInsets(WindowInsetsCompat.Type.systemBars()).bottom);
+            return insets;
         });
     }
 
-    // Check GPS status
-    private void checkGPSStatus() {
-        LocationManager locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-        boolean isGPSEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER);
-        txtGPSStatus.setText(isGPSEnabled ? "GPS: Enabled ✅" : "GPS: Disabled ❌");
-    }
-
-    // Load last SOS sent time
-    private void loadLastSOSTime() {
-        SharedPreferences sharedPreferences = getSharedPreferences(SOS_PREF, MODE_PRIVATE);
-        String lastTime = sharedPreferences.getString(LAST_SOS_TIME, "Not Sent");
-        txtLastSOS.setText("Last SOS: " + lastTime);
-    }
-
-    // Load emergency contacts (Dummy for now)
-    private void loadEmergencyContacts() {
-        txtContacts.setText("Emergency Contacts: 1234567890, 9876543210");
-    }
-
-    // Send SOS Alert
-    private void sendSOSAlert() {
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.SEND_SMS}, PERMISSION_REQUEST_CODE);
-            return;
-        }
-
+    private void sendSOS() {
         progressSending.setVisibility(View.VISIBLE);
-        btnSOS.setEnabled(false);
 
-        new Handler().postDelayed(() -> {
-            String emergencyMessage = "⚠️ SOS ALERT! Emergency at location: " + getCurrentLocation();
-            sendSMS("1234567890", emergencyMessage);
-            saveLastSOSTime();
-            progressSending.setVisibility(View.GONE);
-            btnSOS.setEnabled(true);
-            Toast.makeText(MainActivity.this, "SOS Sent!", Toast.LENGTH_SHORT).show();
-        }, 3000); // Simulating sending delay
-    }
+        locationHelper.getCurrentLocation(new LocationHelper.LocationCallback() {
+            @Override
+            public void onLocationReceived(Location location) {
+                String locationMessage = (location != null) ?
+                        "https://maps.google.com/?q=" + location.getLatitude() + "," + location.getLongitude() :
+                        "GPS unavailable";
 
-    // Get current location (Dummy value for now)
-    private String getCurrentLocation() {
-        return "Latitude: -1.2921, Longitude: 36.8219 (Nairobi, Kenya)";
-    }
+                String message = "🚨 EMERGENCY SOS! Need help! 🚨\nLocation: " + locationMessage;
 
-    // Send SMS message
-    private void sendSMS(String phoneNumber, String message) {
-        SmsManager smsManager = SmsManager.getDefault();
-        smsManager.sendTextMessage(phoneNumber, null, message, null, null);
-    }
+                if (emergencyContacts.isEmpty()) {
+                    Toast.makeText(MainActivity.this, "No emergency contacts available!", Toast.LENGTH_LONG).show();
+                    progressSending.setVisibility(View.GONE);
+                    return;
+                }
 
-    // Save last SOS sent time
-    private void saveLastSOSTime() {
-        String currentTime = new SimpleDateFormat("HH:mm:ss dd/MM/yyyy", Locale.getDefault()).format(new Date());
-        SharedPreferences.Editor editor = getSharedPreferences(SOS_PREF, MODE_PRIVATE).edit();
-        editor.putString(LAST_SOS_TIME, currentTime);
-        editor.apply();
-        txtLastSOS.setText("Last SOS: " + currentTime);
-    }
+                for (String number : emergencyContacts) {
+                    SmsManager.getDefault().sendTextMessage(number, null, message, null, null);
+                }
 
-    // Handle permission result
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == PERMISSION_REQUEST_CODE) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                sendSOSAlert();
-            } else {
-                Toast.makeText(this, "SMS Permission Denied!", Toast.LENGTH_SHORT).show();
+                Toast.makeText(MainActivity.this, "SOS Alert Sent!", Toast.LENGTH_LONG).show();
+                progressSending.setVisibility(View.GONE);
             }
-        }
+        });
+    }
+
+    private void updateGPSStatus(boolean enabled) {
+        txtGPSStatus.setText("GPS: " + (enabled ? "Enabled ✅" : "Disabled ❌"));
+    }
+
+    private void updateEmergencyContacts(List<String> contacts) {
+        this.emergencyContacts = contacts;
+        txtContacts.setText("Contacts: " + (contacts.isEmpty() ? "None Added" : String.join(", ", contacts)));
+    }
+
+    private void openSettings() {
+        Toast.makeText(this, "Go to Firebase Console to add contacts", Toast.LENGTH_LONG).show();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        locationHelper.startLocationUpdates();
+        shakeDetector.start();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        locationHelper.stopLocationUpdates();
+        shakeDetector.stop();
     }
 }

@@ -12,6 +12,15 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.OfflineEmergencyApp"
         tools:targetApi="31">
+        <service
+            android:name=".VoiceCommandService"
+            android:enabled="true"
+            android:exported="true"></service>
+        <service
+            android:name=".ShakeDetectionService"
+            android:enabled="true"
+            android:exported="true" />
+
         <activity
             android:name=".settings"
             android:exported="false" />

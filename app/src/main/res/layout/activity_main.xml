@@ -35,39 +35,39 @@
         app:layout_constraintEnd_toEndOf="parent"
         android:layout_marginTop="10dp"/>
 
-    <!-- GPS Status Indicator -->
     <TextView
         android:id="@+id/txtGPSStatus"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="GPS: Disabled ❌"
-        android:textSize="14sp"
-        android:textColor="@color/black"
+        android:text="GPS: Checking..."
         app:layout_constraintTop_toBottomOf="@id/txtInstructions"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
         android:layout_marginTop="10dp"/>
 
-    <!-- Last SOS Sent -->
     <TextView
         android:id="@+id/txtLastSOS"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Last SOS: Not Sent"
-        android:textSize="14sp"
-        android:textColor="@color/black"
+        android:text="Last SOS Sent: Never"
         app:layout_constraintTop_toBottomOf="@id/txtGPSStatus"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="5dp"/>
+        android:layout_marginTop="10dp"/>
 
-    <!-- SOS Sending Progress -->
+    <TextView
+        android:id="@+id/txtContacts"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Contacts: None Added"
+        app:layout_constraintTop_toBottomOf="@id/txtLastSOS"
+        app:layout_constraintStart_toStartOf="parent"
+        android:layout_marginTop="10dp"/>
+
     <ProgressBar
         android:id="@+id/progressSending"
-        android:layout_width="50dp"
-        android:layout_height="50dp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
         android:visibility="gone"
-        app:layout_constraintTop_toBottomOf="@id/txtLastSOS"
+        app:layout_constraintTop_toBottomOf="@id/btnSOS"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         android:layout_marginTop="10dp"/>
